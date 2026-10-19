@@ -1,21 +1,22 @@
-# Apple Reminders via remindctl
+# remindctl operations
 
-Use this mode only when the user chooses Apple Reminders. Invoke `remindctl` directly on macOS; do not call the Markdown CLI or write a mirror file. Data belongs to the selected system reminder list and may sync through its account. Do not promise that an iCloud list stays only on this Mac.
+Run on macOS. Check installed `remindctl --help` and subcommand help before using unfamiliar flags; upstream documentation may describe features absent locally.
 
-## Connect and choose a list
+## Access and list targeting
 
-1. Check `remindctl --help` and `remindctl status --json`. Read subcommand help before using flags that have not been checked in this session. The installed version, not upstream main, determines the available interface.
-2. If status is `not-determined`, `remindctl authorize` can request the system permission needed for the user's requested integration. The user must answer the macOS dialog. If denied or restricted, explain the status and stop dependent operations. A sandbox IPC failure such as Mach error 4099 is not proof the user denied access; retry a read through the host's supported sandbox permission mechanism when available. Do not bypass a system denial.
-3. Run `remindctl list --json --no-input` to discover lists. Keep the user's existing choice. A sole list can be used for an otherwise unqualified request; with multiple lists and no choice, ask which to use before writing. Do not create a list just because the user changed projects.
+For an operation that needs reminder data, check `remindctl status --json`. If access is `not-determined`, `remindctl authorize` can request permission; the user answers the system dialog. If denied or restricted, report the status and stop dependent operations. A sandbox IPC error such as Mach 4099 is not proof of denied access; retry through the host's supported sandbox permission mechanism when available. Do not bypass a system denial.
 
-List names are not unique across accounts. In 0.1.1, list operations target names; do not write when multiple lists have the same name. Use a newer version's exact list-ID option only after checking its help and resolving the intended list. Newer commands must not be assumed available on an older installation.
+Discover lists with `remindctl list --json --no-input`. Match an explicit or rule-selected list against the current inventory. Use the sole list for an otherwise unqualified add. With multiple lists and no resolved write target, ask which to use; do not create a list or choose the first one silently. Reading unscoped todos can include all lists, grouped by list. `setup` and `help` do not need this access check unless actual list information is needed to answer a user choice.
 
-## Read and mutate
+Names can repeat across accounts. In 0.1.1, list selection uses names: retain records matching the intended `listID` after a read, and do not write to ambiguous same-name lists. Use a newer version's list-ID targeting only if its help confirms support. If an item ID disappears, reread and resolve it; do not recreate the item.
 
-The following baseline commands are advertised by 0.1.1. Replace placeholders with returned values, pass titles and notes as safely quoted arguments, and keep the selected list explicit:
+## Baseline commands
+
+These commands are advertised by 0.1.1. Substitute real returned values, quote user-supplied arguments safely, and use full item IDs rather than indexes or guessed prefixes.
 
 ```sh
 remindctl list "<list-name>" --json --no-input
+remindctl show all --json --no-input
 remindctl add "<title>" --list "<list-name>" --json --no-input
 remindctl edit <full-id> --title "<title>" --json --no-input
 remindctl edit <full-id> --notes "<notes>" --priority high --json --no-input
@@ -23,18 +24,16 @@ remindctl complete <full-id> --json --no-input
 remindctl edit <full-id> --incomplete --json --no-input
 ```
 
-- List contents can include both completed and incomplete records. For ordinary todos and recommendations, select `isCompleted: false`. Include completed records only when relevant to the request.
-- Returned fields include `id`, `listID`, `listName`, `title`, `notes`, `isCompleted`, `completionDate`, `dueDate`, and `priority`. Optional fields can be absent. Priority `none` is unset, not medium.
-- Resolve a description against freshly read records, then use the full returned ID. Avoid display indexes or guessed prefixes. If an ID is no longer found, reread and resolve the item; do not recreate it. Ask when multiple records fit.
-- An explicit add, edit, or completion instruction authorizes that operation. Preserve the shared capture rules: inferred tasks remain candidates until confirmed, and vague explicit tasks may be saved with only a title.
-- Read back the affected record after a mutation to verify the requested fields. If a mutation fails or times out after it may have saved, inspect the target list before retrying; do not create duplicates by retrying blindly. Report local readback separately from cross-device sync or notification delivery.
+Returned fields include `id`, `listID`, `listName`, `title`, `notes`, `isCompleted`, `completionDate`, `dueDate` and `priority`; optional fields may be absent. A list read can include completed items: filter explicitly. Priority `none` means unset, not medium.
 
-## Dates and feature boundaries
+After a mutation, reread the affected item and verify requested fields. A failed or timed-out mutation may already have saved: inspect before retrying, especially after add. Report local readback separately from cross-device sync and notifications.
 
-Interpret timestamps in the user's timezone; a returned UTC date must not be truncated to its first ten characters to determine the local day. Apple supports date-only reminders and timed reminders, but 0.1.1's JSON model does not expose that distinction and its writes always include hour/minute components. Do not silently turn a date-only request into midnight. For that request, pause creation and explain the limitation; do not save an undated substitute unless the user chooses it. Resolve the tool version or have the user set the date in Reminders.app before claiming it is saved as all-day. Do not install or upgrade merely to inspect tasks.
+## Dates and limits
 
-For an explicitly timed request, use the installed command's documented format with an explicit offset (for example `--due "2026-10-23T09:00:00+08:00"`) and verify the returned instant. With no date requested, omit it. `--clear-due` clears the due field. A due field is not evidence of a notification alarm. 0.1.1 has no alarm or repeat flags; do not invent them or promise notification delivery.
+Apple supports date-only and timed reminders, but 0.1.1 loses that distinction in JSON and always writes hour/minute components. For a date-only request, pause creation and explain the limitation; do not substitute midnight or an undated task unless the user chooses it. Resolve the version capability or let the user set the date in Reminders.app. Do not install or upgrade merely to inspect tasks.
 
-Native tags, subtasks, attachments, recurrence edits and archive are outside this baseline integration. Do not convert Markdown tags into native tags, flatten a hierarchy, or emulate archive by deleting or moving a reminder. Do not use `delete` or list deletion as part of this Skill. Explain an unsupported operation without silently changing the storage mode.
+For an explicitly timed request, use the documented format with an explicit offset, for example `--due "2026-10-23T09:00:00+08:00"`, and verify the returned instant. With no requested date, omit it. `--clear-due` clears the due field. Due dates are not evidence of notification alarms; 0.1.1 has no alarm or repeat flags.
 
-Sources: [remindctl](https://github.com/openclaw/remindctl), [0.1.1 data and date conversion](https://github.com/openclaw/remindctl/blob/v0.1.1/Sources/RemindCore/EventKitStore.swift), [Apple due date components](https://developer.apple.com/documentation/eventkit/ekreminder/duedatecomponents), [Apple alarms](https://developer.apple.com/documentation/eventkit/ekcalendaritem/alarms).
+Native tags, subtasks, attachments, archive and recurrence edits are outside this baseline. Agreed title prefixes are ordinary title text. Do not emulate unsupported operations by deleting or moving records. Do not use reminder or list deletion as part of this Skill.
+
+Sources: [remindctl](https://github.com/openclaw/remindctl), [0.1.1 data and date conversion](https://github.com/openclaw/remindctl/blob/v0.1.1/Sources/RemindCore/EventKitStore.swift), [Apple dates](https://developer.apple.com/documentation/eventkit/ekreminder/duedatecomponents), [Apple alarms](https://developer.apple.com/documentation/eventkit/ekcalendaritem/alarms).
