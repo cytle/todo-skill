@@ -1,6 +1,6 @@
 # todo-skill
 
-用自然语言管理 Apple 提醒事项里的工作、开发和生活待办。Skill 负责理解、轻量引导和管理规则，直接调用 [remindctl](https://github.com/openclaw/remindctl)。
+用自然语言管理工作、开发和生活待办。所有任务保存在本地 `~/TODO.md`，可在 Tern 原生 Markdown 看板中查看和编辑。Skill 负责轻量引导、管理规则，以及保存任务进度和 Codex 会话关联。
 
 ## 安装
 
@@ -8,36 +8,62 @@
 npx skills add cytle/todo-skill --skill todo --agent codex --global -y
 ```
 
-运行需要 macOS 和已安装的 `remindctl`。第一次操作时按系统提示允许提醒事项访问；安装工具可参考 remindctl 的上游说明。
+安装后直接对 Agent 使用 `$todo`。普通待办操作只需读写本地 Markdown 文件，无需 Tern 正在运行。在已安装 Tern 的机器上打开看板：
+
+```sh
+tern open ~/TODO.md
+```
+
+尚无文件时，第一次新增任务会建立 Todo / Doing / Done 三栏。
 
 ## 用法
 
-直接对 Agent 说以下指令，或使用客户端支持的 `$todo` 语法。自然语言同样有效。
+这些是给 Agent 的请求，不是 shell 子命令。自然语言同样有效。
 
-| 指令 | 功能 |
+| 请求 | 功能 |
 | --- | --- |
-| `todo setup` | 一起建立分类、打标、日期和优先级等管理规则 |
-| `todo list` | 查看未完成；支持 `today`、`overdue`、`done`、`all` |
-| `todo add …` / `todo edit …` | 新增、修改；“先记着”表示只记录、不追问 |
-| `todo done …` / `todo reopen …` | 完成、恢复待办 |
-| `todo help` | 查看用法和当前能力限制 |
+| `$todo setup` | 约定分类、打标、日期和优先级等管理规则 |
+| `$todo list` | 查看未完成；支持 `today`、`overdue`、`done`、`all` |
+| `$todo add …` / `$todo edit …` | 新增、修改；“先记着”表示只记录、不追问 |
+| `$todo done …` / `$todo reopen …` | 完成并移入 Done，或恢复到 Todo；保留备注 |
+| `$todo save` | 保存当前任务进度、Codex 会话 ID 和工作目录；未关联时先询问绑定或创建 |
+| `$todo help` | 查看用法和能力限制 |
 
-例如：“记一下整理照片，先记着”“看看今天先做什么”。`list` 展示完整匹配结果；“今天先做什么”才从已有事项中推荐最多三项。
+例如：“记一下整理照片，先记着”“看看今天先做什么”。`list` 展示完整匹配结果；“今天先做什么”从已有未完成事项中推荐最多三项。
 
 ## setup：约定怎么管理
 
-`setup` 一次只问一个必要问题，沿用你已经明确的选择。例如：工作和生活用不同清单，还是放在同一清单、用 `[工作]` / `[生活]` 标题前缀区分；什么情况需要日期或高优先级；分类不明确时先收集还是追问。
+`setup` 一次只问一个必要问题，沿用已有选择。例如是否按项目分类、何时使用标题前缀、什么情况需要日期或优先级。标题前缀是普通文本，不是原生标签；没有明确规则时只记录用户交代的内容。
 
-这些只是可选约定。不会强制设置分类，不会给每条待办自动加日期或优先级。当前工具没有原生标签接口，标题前缀只是普通标题文本。
+规则保存在 `~/.local/share/todo-skill/rules.md`，任务保存在 `~/TODO.md`。不需要选择后端或添加技术配置。再次 `setup` 只调整需要改变的规则；应用新规则到旧任务需要明确要求。
 
-已经明确的规则保存在 `~/.local/share/todo-skill/rules.md`，是一份可直接阅读和修改的短文档。只记录你的约定，不存待办、不存后端、路径或清单 ID 等技术配置。没有规则时也可以直接使用：只记录你明确交代的内容。再次 `setup` 只调整需要改变的规则，不重复问已确定的习惯。
+## save 与继续 Codex
 
-`setup` 不改已有待办。要给旧事项补标签或调整分类，需要另外明确要求。
+`$todo save` 优先匹配当前 Codex 会话关联的任务，更新已确认进度、下一步和保存时间。没有关联时先询问绑定现有任务或创建新任务；保存不会自动完成任务或执行下一步。
 
-## 数据与能力
+可选的 [Tern 会话恢复插件](skills/todo/assets/tern-codex-resume/README.md) 提供 **继续 Codex** 按钮和 **⌘⌥R** 快捷键。在 macOS 本地安装路径下注册：
 
-待办固定保存在 Apple 提醒事项，按系统账户设置同步。多个清单可分组查看；新增时使用明确指定或当前会话已选的清单，只有一个清单时直接使用，多个清单且写入目标不明确时再询问。
+```sh
+tern plugin link ~/.agents/skills/todo/assets/tern-codex-resume --json
+```
 
-当前基础能力包括标题、备注、完成状态、日期和优先级。原生标签、子任务、附件、归档及重复规则修改不包含在内。已核对的 `remindctl 0.1.1` 无法保留全天／定时区别；不能把只有日期的请求直接写成午夜，也不能把保存日期等同于已设置通知。具体命令与限制见 [接口说明](skills/todo/references/apple-reminders.md)。
+若 Skill 安装到其他目录，使用该目录下的 `assets/tern-codex-resume`。恢复需要 Tern 和本机可运行的 Codex CLI。选中已关联卡片后，插件在记录的工作目录运行 `codex resume <会话 ID>`，不向会话发送新提示词。
+
+## 数据与边界
+
+`~/TODO.md` 是唯一任务来源。标题、备注、子任务、完成状态和会话关联保留在同一任务块中；直接修改前会重新读取文件并合并并发变化。完成状态以复选框为准，默认列表包含所有未完成任务。
+
+日期和优先级可保存在备注中，供 Skill 筛选；不提供定时通知、自动重复任务或跨设备同步。`today` / `overdue` 按用户时区的自然日比较，未设日期的任务不进入这两个视图。
+
+## 开发验证
+
+恢复插件的验证使用官方 Luau CLI 和 luau-lsp，覆盖实际解析器与按钮处理函数，不启动真实 Codex：
+
+```sh
+LUAU=/path/to/luau python3 skills/todo/assets/tern-codex-resume/verify.py
+luau-lsp analyze --definitions=@tern=/path/to/tern.d.luau \
+  skills/todo/assets/tern-codex-resume/window.luau \
+  skills/todo/assets/tern-codex-resume/binding.luau
+```
 
 MIT License。

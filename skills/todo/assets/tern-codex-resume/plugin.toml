@@ -1,0 +1,6 @@
+schema = 1
+id = "tern-codex-resume"
+name = "Continue Codex"
+version = "0.1.0"
+description = "Resume the Codex session linked to the selected native TODO card."
+window = "window.luau"
